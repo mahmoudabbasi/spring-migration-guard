@@ -1,0 +1,13 @@
+
+.gradle/
+build/
+out/
+.idea/
+.intellijPlatform/
+*.iml
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
