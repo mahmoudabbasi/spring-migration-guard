@@ -9,7 +9,10 @@
         recommend compatible versions, and preview changes before applying them.
     ]]></description>
 
+
     <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.idea.maven</depends>
+
 
     <actions>
         <action id="com.bammwise.migrationguard.AnalyzeProjectAction"

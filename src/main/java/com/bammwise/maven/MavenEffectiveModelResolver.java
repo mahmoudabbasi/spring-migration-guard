@@ -1,139 +1,75 @@
+
 package com.bammwise.maven;
 
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VirtualFile;
+import org.jetbrains.idea.maven.model.MavenArtifact;
+import org.jetbrains.idea.maven.project.MavenProject;
+import org.jetbrains.idea.maven.project.MavenProjectsManager;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import javax.xml.XMLConstants;
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.File;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class MavenEffectiveModelResolver {
-    public List<String> resolveDependencies(File pomFile)
-            throws Exception {
 
-        if (pomFile == null || !pomFile.isFile()) {
+    public List<String> resolveDependencies(
+            Project intellijProject,
+            File pomFile) {
+
+        if (intellijProject == null
+                || pomFile == null
+                || !pomFile.isFile()) {
             throw new IllegalArgumentException(
-                    "Valid pom.xml file is required."
+                    "A valid IntelliJ project and pom.xml are required."
             );
         }
 
-        File outputFile = File.createTempFile(
-                "spring-migration-effective-",
-                ".xml"
-        );
+        VirtualFile virtualPom = LocalFileSystem.getInstance()
+                .findFileByIoFile(pomFile);
 
-        File logFile = File.createTempFile(
-                "spring-migration-maven-",
-                ".log"
-        );
-
-        try {
-            ProcessBuilder builder = new ProcessBuilder(
-                    "mvn",
-                    "-B",
-                    "-f",
-                    pomFile.getAbsolutePath(),
-                    "help:effective-pom",
-                    "-Doutput=" + outputFile.getAbsolutePath()
+        if (virtualPom == null) {
+            throw new IllegalStateException(
+                    "IntelliJ could not locate the pom.xml file."
             );
-
-            builder.directory(pomFile.getParentFile());
-            builder.redirectErrorStream(true);
-            builder.redirectOutput(logFile);
-
-            Process process = builder.start();
-
-            boolean finished = process.waitFor(
-                    2, TimeUnit.MINUTES
-            );
-
-            if (!finished) {
-                process.destroyForcibly();
-
-                throw new IllegalStateException(
-                        "Maven effective POM resolution timed out."
-                );
-            }
-
-            if (process.exitValue() != 0 || !outputFile.isFile()
-                    || outputFile.length() == 0) {
-
-                String log = Files.readString(logFile.toPath());
-
-                throw new IllegalStateException(
-                        "Maven could not build the effective POM:\n"
-                                + log
-                );
-            }
-
-            return parseDependencies(outputFile);
-
-        } finally {
-            Files.deleteIfExists(outputFile.toPath());
-            Files.deleteIfExists(logFile.toPath());
         }
-    }
 
-    private List<String> parseDependencies(File effectivePom)
-            throws Exception {
+        MavenProjectsManager manager =
+                MavenProjectsManager.getInstance(intellijProject);
 
-        DocumentBuilderFactory factory =
-                DocumentBuilderFactory.newInstance();
+        if (!manager.isInitialized()) {
+            throw new IllegalStateException(
+                    "Maven has not finished initializing. "
+                            + "Reload the Maven project and try again."
+            );
+        }
 
-        factory.setFeature(
-                "http://apache.org/xml/features/disallow-doctype-decl",
-                true
-        );
-        factory.setFeature(
-                "http://xml.org/sax/features/external-general-entities",
-                false
-        );
-        factory.setFeature(
-                "http://xml.org/sax/features/external-parameter-entities",
-                false
-        );
-        factory.setAttribute(
-                XMLConstants.ACCESS_EXTERNAL_DTD, ""
-        );
-        factory.setAttribute(
-                XMLConstants.ACCESS_EXTERNAL_SCHEMA, ""
-        );
+        MavenProject mavenProject = manager.findProject(virtualPom);
 
-        Document document = factory.newDocumentBuilder()
-                .parse(effectivePom);
-
-        Element root = document.getDocumentElement();
-        Element dependenciesElement =
-                firstChild(root, "dependencies");
+        if (mavenProject == null) {
+            throw new IllegalStateException(
+                    "The pom.xml is not registered as a Maven project. "
+                            + "Reload Maven projects and try again."
+            );
+        }
 
         List<String> dependencies = new ArrayList<>();
 
-        if (dependenciesElement == null) {
-            return dependencies;
-        }
+        for (MavenArtifact artifact : mavenProject.getDependencies()) {
+            System.out.printf(
+                    "[SMG DEBUG] %s:%s | version=%s | scope=%s%n",
+                    artifact.getGroupId(),
+                    artifact.getArtifactId(),
+                    artifact.getVersion(),
+                    artifact.getScope()
+            );
 
-        NodeList children = dependenciesElement.getChildNodes();
 
-        for (int i = 0; i < children.getLength(); i++) {
-            Node node = children.item(i);
-
-            if (!(node instanceof Element dependency)
-                    || !"dependency".equals(
-                    dependency.getTagName())) {
-                continue;
-            }
-
-            String groupId = childText(dependency, "groupId");
-            String artifactId = childText(dependency, "artifactId");
-            String version = childText(dependency, "version");
-            String scope = childText(dependency, "scope");
+            String groupId = artifact.getGroupId();
+            String artifactId = artifact.getArtifactId();
+            String version = artifact.getVersion();
+            String scope = artifact.getScope();
 
             if (groupId == null || artifactId == null) {
                 continue;
@@ -144,13 +80,11 @@ public class MavenEffectiveModelResolver {
                     .append(":")
                     .append(artifactId)
                     .append(":")
-                    .append(
-                            version != null
-                                    ? version
-                                    : "(version unresolved)"
-                    );
+                    .append(version != null
+                            ? version
+                            : "(version unresolved)");
 
-            if (scope != null) {
+            if (scope != null && !scope.isBlank()) {
                 entry.append(" [scope: ")
                         .append(scope)
                         .append("]");
@@ -159,33 +93,11 @@ public class MavenEffectiveModelResolver {
             dependencies.add(entry.toString());
         }
 
+        System.out.println(
+                "[SMG DEBUG] Resolved dependency count: "
+                        + dependencies.size()
+        );
+
         return dependencies;
-    }
-
-    private Element firstChild(Element parent, String name) {
-        NodeList children = parent.getChildNodes();
-
-        for (int i = 0; i < children.getLength(); i++) {
-            Node node = children.item(i);
-
-            if (node instanceof Element element
-                    && name.equals(element.getTagName())) {
-                return element;
-            }
-        }
-
-        return null;
-    }
-
-    private String childText(Element parent, String name) {
-        Element child = firstChild(parent, name);
-
-        if (child == null) {
-            return null;
-        }
-
-        String value = child.getTextContent().trim();
-
-        return value.isEmpty() ? null : value;
     }
 }

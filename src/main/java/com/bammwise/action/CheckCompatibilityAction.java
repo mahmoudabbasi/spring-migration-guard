@@ -1,6 +1,5 @@
 package com.bammwise.action;
 
-
 import com.bammwise.compatibility.CompatibilityValidator;
 import com.bammwise.detector.ProjectEnvironmentDetector;
 import com.bammwise.model.ProjectEnvironment;

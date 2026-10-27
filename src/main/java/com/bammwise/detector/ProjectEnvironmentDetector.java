@@ -94,12 +94,21 @@ public class ProjectEnvironmentDetector {
         MavenEffectiveModelResolver resolver =
                 new MavenEffectiveModelResolver();
 
-        environment.getDependencies().clear();
+        try {
+            List<String> effectiveDependencies =
+                    resolver.resolveDependencies(project, pomFileOnDisk);
+            System.err.println("[SMG DEBUG] ProjectEnvironmentDetector is running");
 
-        environment.getDependencies().addAll(
-                resolver.resolveDependencies(pomFileOnDisk)
-        );
-
+            if (!effectiveDependencies.isEmpty()) {
+                environment.getDependencies().clear();
+                environment.getDependencies().addAll(effectiveDependencies);
+            }
+        } catch (Exception exception) {
+            System.err.println(
+                    "Spring Migration Guard: Failed to resolve effective Maven dependencies."
+            );
+            exception.printStackTrace();
+        }
         return environment;
     }
 
