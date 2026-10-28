@@ -47,12 +47,32 @@ public class MavenEffectiveModelResolver {
 
         MavenProject mavenProject = manager.findProject(virtualPom);
 
+
+        System.err.println(
+                "[SMG DEBUG] Maven initialized: " + manager.isInitialized()
+        );
+
+        System.err.println(
+                "[SMG DEBUG] pom path: " + pomFile.getAbsolutePath()
+        );
+
+        System.err.println(
+                "[SMG DEBUG] Maven project found: " + (mavenProject != null)
+        );
+
         if (mavenProject == null) {
             throw new IllegalStateException(
                     "The pom.xml is not registered as a Maven project. "
                             + "Reload Maven projects and try again."
             );
         }
+
+        System.err.println(
+                "[SMG DEBUG] Maven dependency count: "
+                        + (mavenProject == null
+                        ? -1
+                        : mavenProject.getDependencies().size())
+        );
 
         List<String> dependencies = new ArrayList<>();
 

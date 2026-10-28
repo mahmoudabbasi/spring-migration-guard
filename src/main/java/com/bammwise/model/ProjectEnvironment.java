@@ -1,11 +1,15 @@
+
 package com.bammwise.model;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class ProjectEnvironment {
+
     private String springBootVersion;
+    private String springCloudVersion;
     private String javaVersion;
+
     private final List<String> dependencies = new ArrayList<>();
 
     public String getSpringBootVersion() {
@@ -14,6 +18,14 @@ public class ProjectEnvironment {
 
     public void setSpringBootVersion(String springBootVersion) {
         this.springBootVersion = springBootVersion;
+    }
+
+    public String getSpringCloudVersion() {
+        return springCloudVersion;
+    }
+
+    public void setSpringCloudVersion(String springCloudVersion) {
+        this.springCloudVersion = springCloudVersion;
     }
 
     public String getJavaVersion() {
@@ -27,4 +39,8 @@ public class ProjectEnvironment {
     public List<String> getDependencies() {
         return dependencies;
     }
+
+
+
+
 }

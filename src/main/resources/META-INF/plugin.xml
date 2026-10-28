@@ -9,13 +9,19 @@
         recommend compatible versions, and preview changes before applying them.
     ]]></description>
 
-
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.idea.maven</depends>
 
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+                id="Spring Migration Guard"
+                anchor="bottom"
+                factoryClass="com.bammwise.ui.MigrationGuardToolWindowFactory"/>
+    </extensions>
 
     <actions>
-        <action id="com.bammwise.migrationguard.AnalyzeProjectAction"
+        <action
+                id="com.bammwise.migrationguard.AnalyzeProjectAction"
                 class="com.bammwise.action.CheckCompatibilityAction"
                 text="Analyze Spring Boot Compatibility"
                 description="Analyze dependencies and recommend compatible versions">

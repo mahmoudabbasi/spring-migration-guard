@@ -78,6 +78,9 @@ public class ProjectEnvironmentDetector {
         String javaVersion = findJavaVersion(root);
 
 
+        String cloudVersion = findSpringCloudVersion(root, properties);
+
+        environment.setSpringCloudVersion(cloudVersion);
 
         environment.setSpringBootVersion(
                 resolveProperties(bootVersion, properties)
@@ -112,6 +115,58 @@ public class ProjectEnvironmentDetector {
         return environment;
     }
 
+    private String findSpringCloudVersion(
+            Element root,
+            Properties properties) {
+
+        // 1. First, check the conventional Maven property.
+        String version = properties.getProperty("spring-cloud.version");
+
+        if (version != null && !version.isBlank()) {
+            return resolveProperties(version, properties);
+        }
+
+        // 2. Find the Spring Cloud BOM in dependencyManagement.
+        Element dependencyManagement =
+                firstChild(root, "dependencyManagement");
+
+        if (dependencyManagement == null) {
+            return null;
+        }
+
+        Element dependencies =
+                firstChild(dependencyManagement, "dependencies");
+
+        if (dependencies == null) {
+            return null;
+        }
+
+        NodeList nodes = dependencies.getChildNodes();
+
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Node node = nodes.item(i);
+
+            if (!(node instanceof Element dependency)
+                    || !"dependency".equals(dependency.getTagName())) {
+                continue;
+            }
+
+            String groupId = childText(dependency, "groupId");
+            String artifactId = childText(dependency, "artifactId");
+
+            if ("org.springframework.cloud".equals(groupId)
+                    && "spring-cloud-dependencies".equals(artifactId)) {
+
+                String bomVersion = childText(dependency, "version");
+
+                if (bomVersion != null) {
+                    return resolveProperties(bomVersion, properties);
+                }
+            }
+        }
+
+        return null;
+    }
     private Properties readProperties(Element root) {
         Properties properties = new Properties();
 

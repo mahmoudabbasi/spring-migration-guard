@@ -1,16 +1,25 @@
+
 package com.bammwise.action;
 
 import com.bammwise.compatibility.CompatibilityValidator;
 import com.bammwise.detector.ProjectEnvironmentDetector;
 import com.bammwise.model.ProjectEnvironment;
+import com.bammwise.ui.CompatibilityReportPanel;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.wm.ToolWindow;
+import com.intellij.openapi.wm.ToolWindowManager;
+import com.intellij.ui.content.Content;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+
 public class CheckCompatibilityAction extends AnAction {
+
+    private static final String TOOL_WINDOW_ID =
+            "Spring Migration Guard";
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent event) {
@@ -20,53 +29,55 @@ public class CheckCompatibilityAction extends AnAction {
             return;
         }
 
+        analyzeProject(project);
+    }
+
+    private void analyzeProject(Project project) {
         try {
             // Step 1: Detect project environment
             ProjectEnvironment environment =
                     new ProjectEnvironmentDetector().detect(project);
 
             // Step 2: Validate compatibility
-            CompatibilityValidator validator =
-                    new CompatibilityValidator();
+            List<String> issues =
+                    new CompatibilityValidator().validate(environment);
 
-            List<String> issues = validator.validate(environment);
+            // Step 3: Find the Tool Window
+            ToolWindow toolWindow =
+                    ToolWindowManager.getInstance(project)
+                            .getToolWindow(TOOL_WINDOW_ID);
 
-            // Step 3: Build report
-            StringBuilder report = new StringBuilder();
-
-            report.append("Spring Boot: ")
-                    .append(environment.getSpringBootVersion())
-                    .append("\n");
-
-            report.append("Java: ")
-                    .append(environment.getJavaVersion())
-                    .append("\n\n");
-
-            report.append("Compatibility Analysis:\n");
-
-            for (String issue : issues) {
-                report.append("\n")
-                        .append(issue);
+            if (toolWindow == null) {
+                Messages.showErrorDialog(
+                        project,
+                        "Spring Migration Guard Tool Window is not registered.",
+                        "Spring Migration Guard"
+                );
+                return;
             }
 
-            report.append("Dependencies:\n");
+            // Step 4: Show the Tool Window
+            toolWindow.show();
 
-            if (environment.getDependencies().isEmpty()) {
-                report.append("No direct dependencies found.\n");
-            } else {
-                for (String dependency : environment.getDependencies()) {
-                    report.append("- ")
-                            .append(dependency)
-                            .append("\n");
+            // Step 5: Update the report panel
+            for (Content content :
+                    toolWindow.getContentManager().getContents()) {
+
+                if (content.getComponent()
+                        instanceof CompatibilityReportPanel panel) {
+
+                    panel.setOnAnalyzeAgain(
+                            () -> analyzeProject(project)
+                    );
+
+                    panel.updateReport(environment, issues);
+                    return;
                 }
             }
 
-            report.append("\nCompatibility Analysis:\n");
-
-            // Step 4: Display results
-            Messages.showInfoMessage(
+            Messages.showErrorDialog(
                     project,
-                    report.toString(),
+                    "Could not find the compatibility report panel.",
                     "Spring Migration Guard"
             );
 
@@ -79,5 +90,4 @@ public class CheckCompatibilityAction extends AnAction {
             );
         }
     }
-
 }
