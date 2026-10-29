@@ -2,6 +2,7 @@
 package com.bammwise.compatibility;
 
 import com.bammwise.model.ProjectEnvironment;
+import com.bammwise.model.SpringCloudCompatibilityRule;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +16,14 @@ public class CompatibilityValidator {
 
     private static final Pattern JAVA_VERSION_PATTERN =
             Pattern.compile("^(?:1\\.)?(\\d+)(?:[.+_-].*)?$");
+
+    private final CompatibilityRuleEngine ruleEngine =
+            new CompatibilityRuleEngine(
+                    DefaultCompatibilityRules.all()
+            );
+
+    private final List<SpringCloudCompatibilityRule> springCloudRules =
+            DefaultSpringCloudCompatibilityRules.all();
 
     public List<String> validate(ProjectEnvironment environment) {
         List<String> issues = new ArrayList<>();
@@ -58,15 +67,25 @@ public class CompatibilityValidator {
         }
 
         if (bootMajor != null && javaMajor != null) {
-            validateJavaCompatibility(
-                    bootVersion,
-                    bootMajor,
-                    javaVersion,
-                    javaMajor,
-                    issues
-            );
-        }
+            issues.addAll(ruleEngine.evaluate(environment));
 
+            if (bootMajor < 2 || bootMajor > 4) {
+                issues.add(
+                        "[WARNING] No Java compatibility rule is configured "
+                                + "for Spring Boot " + bootVersion + "."
+                );
+            }
+
+            if ("2.7.1".equals(bootVersion) && javaMajor > 18) {
+                issues.add(
+                        "[WARNING] Spring Boot 2.7.1 officially supports Java "
+                                + "up to 18, but the project declares Java "
+                                + javaVersion
+                                + ". Consider upgrading Spring Boot or using "
+                                + "a supported Java version."
+                );
+            }
+        }
         if (hasSpringCloudDependency(environment)) {
             validateSpringCloudCompatibility(
                     bootVersion,
@@ -85,56 +104,6 @@ public class CompatibilityValidator {
         return issues;
     }
 
-    private void validateJavaCompatibility(
-            String bootVersion,
-            int bootMajor,
-            String javaVersion,
-            int javaMajor,
-            List<String> issues) {
-
-        if (bootMajor == 3 && javaMajor < 17) {
-            issues.add(
-                    "[ERROR] Spring Boot " + bootVersion
-                            + " requires Java 17 or later, but the project "
-                            + "declares Java " + javaVersion + "."
-            );
-            return;
-        }
-
-        if (bootMajor >= 4 && javaMajor < 17) {
-            issues.add(
-                    "[ERROR] Spring Boot " + bootVersion
-                            + " requires Java 17 or later, but the project "
-                            + "declares Java " + javaVersion + "."
-            );
-            return;
-        }
-
-        if (bootMajor == 2 && javaMajor < 8) {
-            issues.add(
-                    "[ERROR] Spring Boot 2.x requires Java 8 or later."
-            );
-            return;
-        }
-
-        if (bootMajor < 2 || bootMajor > 4) {
-            issues.add(
-                    "[WARNING] No Java compatibility rule is configured "
-                            + "for Spring Boot " + bootVersion + "."
-            );
-        }
-
-        if ("2.7.1".equals(bootVersion) && javaMajor > 18) {
-            issues.add(
-                    "[WARNING] Spring Boot 2.7.1 officially supports Java "
-                            + "up to 18, but the project declares Java "
-                            + javaVersion
-                            + ". Consider upgrading Spring Boot or using "
-                            + "a supported Java version."
-            );
-        }
-
-    }
 
     private void validateSpringCloudCompatibility(
             String bootVersion,
@@ -156,7 +125,6 @@ public class CompatibilityValidator {
 
         Integer bootMajor = parseMajorVersion(bootVersion);
         Integer bootMinor = parseMinorVersion(bootVersion);
-
         Integer cloudMajor = parseMajorVersion(cloudVersion);
         Integer cloudMinor = parseMinorVersion(cloudVersion);
 
@@ -169,47 +137,14 @@ public class CompatibilityValidator {
             return;
         }
 
+        SpringCloudCompatibilityRule matchedRule =
+                springCloudRules.stream()
+                        .filter(rule -> rule.matchesBootVersion(
+                                bootMajor, bootMinor))
+                        .findFirst()
+                        .orElse(null);
 
-        if (bootMajor == 3 && bootMinor == 1
-                && cloudMajor == 2022 && cloudMinor == 0) {
-
-            issues.add(
-                    "[INFO] Spring Boot 3.1.x and Spring Cloud 2022.0.x "
-                            + "are a compatible version family. "
-                            + "Verify the minimum release and support status."
-            );
-            return;
-        }
-
-        if (bootMajor != 3 && bootMajor != 4) {
-            issues.add(
-                    "[WARNING] The current Spring Cloud compatibility "
-                            + "rules cover Spring Boot 3.x and 4.x only."
-            );
-            return;
-        }
-
-        Integer expectedCloudMajor = null;
-        Integer expectedCloudMinor = null;
-
-        if (bootMajor == 3 && (bootMinor == 0 || bootMinor == 1)) {
-            expectedCloudMajor = 2022;
-            expectedCloudMinor = 0;
-        } else if (bootMajor == 3 && (bootMinor == 2 || bootMinor == 3)) {
-            expectedCloudMajor = 2023;
-            expectedCloudMinor = 0;
-        } else if (bootMajor == 3 && bootMinor == 4) {
-            expectedCloudMajor = 2024;
-            expectedCloudMinor = 0;
-        } else if (bootMajor == 3 && bootMinor == 5) {
-            expectedCloudMajor = 2025;
-            expectedCloudMinor = 0;
-        } else if (bootMajor == 4 && bootMinor == 0) {
-            expectedCloudMajor = 2025;
-            expectedCloudMinor = 1;
-        }
-
-        if (expectedCloudMajor == null) {
+        if (matchedRule == null) {
             issues.add(
                     "[WARNING] No Spring Cloud compatibility rule is "
                             + "configured for Spring Boot " + bootVersion
@@ -218,17 +153,26 @@ public class CompatibilityValidator {
             return;
         }
 
-        if (cloudMajor != expectedCloudMajor
-                || cloudMinor != expectedCloudMinor) {
+        if (!matchedRule.matchesCloudVersion(cloudMajor, cloudMinor)) {
             issues.add(
                     "[WARNING] Spring Boot " + bootVersion
                             + " is expected to use Spring Cloud "
-                            + expectedCloudMajor + "." + expectedCloudMinor
+                            + matchedRule.cloudMajor() + "."
+                            + matchedRule.cloudMinor()
                             + ". Detected Spring Cloud " + cloudVersion
                             + ". Verify the official compatibility matrix."
             );
+            return;
         }
+
+        issues.add(
+                "[INFO] Spring Boot " + bootVersion
+                        + " and Spring Cloud " + cloudVersion
+                        + " match a configured release-family rule. "
+                        + "Verify the minimum release and support status."
+        );
     }
+
 
     private boolean hasSpringCloudDependency(
             ProjectEnvironment environment) {
