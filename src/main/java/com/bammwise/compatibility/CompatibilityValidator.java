@@ -25,6 +25,9 @@ public class CompatibilityValidator {
     private final List<SpringCloudCompatibilityRule> springCloudRules =
             DefaultSpringCloudCompatibilityRules.all();
 
+    private final DependencyCompatibilityAnalyzer dependencyAnalyzer =
+            new DependencyCompatibilityAnalyzer();
+
     public List<String> validate(ProjectEnvironment environment) {
         List<String> issues = new ArrayList<>();
 
@@ -32,6 +35,7 @@ public class CompatibilityValidator {
             issues.add("[ERROR] Project environment is missing.");
             return issues;
         }
+
 
         String bootVersion = environment.getSpringBootVersion();
         String javaVersion = environment.getJavaVersion();
@@ -93,6 +97,7 @@ public class CompatibilityValidator {
                     issues
             );
         }
+//        issues.addAll(dependencyAnalyzer.analyze(environment));
 
         if (issues.isEmpty()) {
             issues.add(
@@ -174,15 +179,30 @@ public class CompatibilityValidator {
     }
 
 
+
     private boolean hasSpringCloudDependency(
             ProjectEnvironment environment) {
 
+        boolean foundInStructuredDependencies =
+                environment.getDependencyInfos().stream()
+                        .anyMatch(dependency ->
+                                "org.springframework.cloud".equals(
+                                        dependency.groupId()
+                                )
+                        );
+
+        if (foundInStructuredDependencies) {
+            return true;
+        }
+
         return environment.getDependencies().stream()
-                .filter(dependency -> dependency != null)
                 .anyMatch(dependency ->
-                        dependency.startsWith("org.springframework.cloud:")
+                        dependency.startsWith(
+                                "org.springframework.cloud:"
+                        )
                 );
     }
+
 
     private Integer parseMajorVersion(String version) {
         return parseVersionPart(version, 1);

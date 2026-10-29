@@ -1,6 +1,7 @@
 
 package com.bammwise.maven;
 
+import com.bammwise.model.DependencyInfo;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -14,10 +15,11 @@ import java.util.List;
 
 public class MavenEffectiveModelResolver {
 
-    public List<String> resolveDependencies(
-            Project intellijProject,
-            File pomFile) {
 
+    public List<DependencyInfo> resolveDependencyInfos(
+            Project intellijProject,
+            File pomFile
+    ) {
         if (intellijProject == null
                 || pomFile == null
                 || !pomFile.isFile()) {
@@ -47,19 +49,6 @@ public class MavenEffectiveModelResolver {
 
         MavenProject mavenProject = manager.findProject(virtualPom);
 
-
-        System.err.println(
-                "[SMG DEBUG] Maven initialized: " + manager.isInitialized()
-        );
-
-        System.err.println(
-                "[SMG DEBUG] pom path: " + pomFile.getAbsolutePath()
-        );
-
-        System.err.println(
-                "[SMG DEBUG] Maven project found: " + (mavenProject != null)
-        );
-
         if (mavenProject == null) {
             throw new IllegalStateException(
                     "The pom.xml is not registered as a Maven project. "
@@ -67,57 +56,85 @@ public class MavenEffectiveModelResolver {
             );
         }
 
-        System.err.println(
-                "[SMG DEBUG] Maven dependency count: "
-                        + (mavenProject == null
-                        ? -1
-                        : mavenProject.getDependencies().size())
-        );
-
-        List<String> dependencies = new ArrayList<>();
+        List<DependencyInfo> dependencies = new ArrayList<>();
 
         for (MavenArtifact artifact : mavenProject.getDependencies()) {
-            System.out.printf(
-                    "[SMG DEBUG] %s:%s | version=%s | scope=%s%n",
-                    artifact.getGroupId(),
-                    artifact.getArtifactId(),
-                    artifact.getVersion(),
-                    artifact.getScope()
-            );
-
-
             String groupId = artifact.getGroupId();
             String artifactId = artifact.getArtifactId();
-            String version = artifact.getVersion();
-            String scope = artifact.getScope();
 
             if (groupId == null || artifactId == null) {
                 continue;
             }
 
-            StringBuilder entry = new StringBuilder()
-                    .append(groupId)
-                    .append(":")
-                    .append(artifactId)
-                    .append(":")
-                    .append(version != null
-                            ? version
-                            : "(version unresolved)");
+            String resolvedVersion = artifact.getVersion();
 
-            if (scope != null && !scope.isBlank()) {
-                entry.append(" [scope: ")
-                        .append(scope)
-                        .append("]");
-            }
+            String managedVersion =
+                    mavenProject.findManagedDependencyVersion(
+                            groupId,
+                            artifactId
+                    );
 
-            dependencies.add(entry.toString());
+            DependencyInfo dependency = new DependencyInfo(
+                    groupId,
+                    artifactId,
+                    resolvedVersion,
+                    artifact.getScope(),
+                    managedVersion
+            );
+
+            dependencies.add(dependency);
         }
 
         System.out.println(
-                "[SMG DEBUG] Resolved dependency count: "
+                "[SMG DEBUG] Structured Maven dependencies: "
                         + dependencies.size()
         );
 
+        long managedCount = dependencies.stream()
+                .filter(DependencyInfo::hasManagedVersion)
+                .count();
+
+        long overrideCount = dependencies.stream()
+                .filter(DependencyInfo::hasVersionOverride)
+                .count();
+
+        System.out.println(
+                "[SMG DEBUG] Dependencies with managed versions: "
+                        + managedCount
+        );
+
+        System.out.println(
+                "[SMG DEBUG] Dependencies differing from managed versions: "
+                        + overrideCount
+        );
+
+        dependencies.stream()
+                .filter(DependencyInfo::hasVersionOverride)
+                .forEach(dependency -> System.out.println(
+                        "[SMG DEBUG] Version override: "
+                                + dependency.groupId()
+                                + ":"
+                                + dependency.artifactId()
+                                + " | resolved="
+                                + dependency.version()
+                                + " | managed="
+                                + dependency.managedVersion()
+                ));
+
         return dependencies;
+    }
+
+
+    /**
+     * Backward-compatible method for existing callers.
+     */
+    public List<String> resolveDependencies(
+            Project intellijProject,
+            File pomFile) {
+
+        return resolveDependencyInfos(intellijProject, pomFile)
+                .stream()
+                .map(DependencyInfo::toDisplayString)
+                .toList();
     }
 }

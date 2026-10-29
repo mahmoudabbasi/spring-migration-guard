@@ -10,7 +10,12 @@ public class ProjectEnvironment {
     private String springCloudVersion;
     private String javaVersion;
 
+    // Preserved for backward compatibility with existing code.
     private final List<String> dependencies = new ArrayList<>();
+
+    // Structured dependency data for compatibility analysis.
+    private final List<DependencyInfo> dependencyInfos =
+            new ArrayList<>();
 
     public String getSpringBootVersion() {
         return springBootVersion;
@@ -40,7 +45,21 @@ public class ProjectEnvironment {
         return dependencies;
     }
 
+    public List<DependencyInfo> getDependencyInfos() {
+        return dependencyInfos;
+    }
 
+    public void addDependencyInfo(DependencyInfo dependencyInfo) {
+        if (dependencyInfo == null) {
+            throw new IllegalArgumentException(
+                    "Dependency info must not be null."
+            );
+        }
 
+        dependencyInfos.add(dependencyInfo);
+    }
 
+    public void clearDependencyInfos() {
+        dependencyInfos.clear();
+    }
 }

@@ -2,7 +2,9 @@
 package com.bammwise.action;
 
 import com.bammwise.compatibility.CompatibilityValidator;
+import com.bammwise.compatibility.DependencyCompatibilityAnalyzer;
 import com.bammwise.detector.ProjectEnvironmentDetector;
+import com.bammwise.model.DependencyCompatibilityIssue;
 import com.bammwise.model.ProjectEnvironment;
 import com.bammwise.ui.CompatibilityReportPanel;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -38,11 +40,16 @@ public class CheckCompatibilityAction extends AnAction {
             ProjectEnvironment environment =
                     new ProjectEnvironmentDetector().detect(project);
 
-            // Step 2: Validate compatibility
+            // Step 2: Run existing compatibility rules
             List<String> issues =
                     new CompatibilityValidator().validate(environment);
 
-            // Step 3: Find the Tool Window
+            // Step 3: Run structured dependency analysis
+            List<DependencyCompatibilityIssue> dependencyIssues =
+                    new DependencyCompatibilityAnalyzer()
+                            .analyzeIssues(environment);
+
+            // Step 4: Find the Tool Window
             ToolWindow toolWindow =
                     ToolWindowManager.getInstance(project)
                             .getToolWindow(TOOL_WINDOW_ID);
@@ -56,10 +63,10 @@ public class CheckCompatibilityAction extends AnAction {
                 return;
             }
 
-            // Step 4: Show the Tool Window
+            // Step 5: Show the Tool Window
             toolWindow.show();
 
-            // Step 5: Update the report panel
+            // Step 6: Update the report panel
             for (Content content :
                     toolWindow.getContentManager().getContents()) {
 
@@ -70,7 +77,11 @@ public class CheckCompatibilityAction extends AnAction {
                             () -> analyzeProject(project)
                     );
 
-                    panel.updateReport(environment, issues);
+                    panel.updateStructuredReport(
+                            environment,
+                            issues,
+                            dependencyIssues
+                    );
                     return;
                 }
             }

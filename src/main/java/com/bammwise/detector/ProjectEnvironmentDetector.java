@@ -1,6 +1,7 @@
 package com.bammwise.detector;
 
 import com.bammwise.maven.MavenEffectiveModelResolver;
+import com.bammwise.model.DependencyInfo;
 import com.bammwise.model.ProjectEnvironment;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -98,14 +99,25 @@ public class ProjectEnvironmentDetector {
                 new MavenEffectiveModelResolver();
 
         try {
-            List<String> effectiveDependencies =
-                    resolver.resolveDependencies(project, pomFileOnDisk);
-            System.err.println("[SMG DEBUG] ProjectEnvironmentDetector is running");
+
+            List<DependencyInfo> effectiveDependencies =
+                    resolver.resolveDependencyInfos(project, pomFileOnDisk);
+
+            System.err.println(
+                    "[SMG DEBUG] ProjectEnvironmentDetector is running"
+            );
 
             if (!effectiveDependencies.isEmpty()) {
+                environment.clearDependencyInfos();
+                environment.getDependencyInfos().addAll(effectiveDependencies);
+
                 environment.getDependencies().clear();
-                environment.getDependencies().addAll(effectiveDependencies);
+
+                effectiveDependencies.stream()
+                        .map(DependencyInfo::toDisplayString)
+                        .forEach(environment.getDependencies()::add);
             }
+
         } catch (Exception exception) {
             System.err.println(
                     "Spring Migration Guard: Failed to resolve effective Maven dependencies."

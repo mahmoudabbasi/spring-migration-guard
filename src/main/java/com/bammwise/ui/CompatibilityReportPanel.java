@@ -8,6 +8,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
 import java.awt.event.ActionListener;
+import com.bammwise.model.DependencyCompatibilityIssue;
 
 public class CompatibilityReportPanel extends JPanel {
 
@@ -213,6 +214,73 @@ public class CompatibilityReportPanel extends JPanel {
                 .replace("<", "&lt;")
                 .replace(">", "&gt;");
     }
+
+
+    public void updateStructuredReport(
+            ProjectEnvironment environment,
+            List<String> issues,
+            List<DependencyCompatibilityIssue> dependencyIssues) {
+
+        updateReport(environment, issues);
+
+        if (dependencyIssues == null || dependencyIssues.isEmpty()) {
+            return;
+        }
+
+        for (DependencyCompatibilityIssue issue : dependencyIssues) {
+            addDependencyIssue(issue);
+        }
+
+        issuesPanel.revalidate();
+        issuesPanel.repaint();
+    }
+
+    private void addDependencyIssue(DependencyCompatibilityIssue issue) {
+        Color color = switch (issue.severity().toUpperCase()) {
+            case "ERROR" -> new Color(220, 65, 65);
+            case "WARNING" -> new Color(205, 130, 25);
+            default -> new Color(55, 135, 210);
+        };
+
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 4, 0, 0, color),
+                new EmptyBorder(10, 12, 10, 8)
+        ));
+        card.setBackground(UIManager.getColor("Panel.background"));
+
+        JLabel title = new JLabel(
+                "[" + issue.severity() + "] " + issue.title()
+        );
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 13f));
+        title.setForeground(color);
+
+        card.add(title);
+        card.add(Box.createVerticalStrut(8));
+        card.add(createDetailLabel("Dependency", issue.dependency()));
+        card.add(createDetailLabel("Current version", issue.currentVersion()));
+        card.add(createDetailLabel("Managed version", issue.managedVersion()));
+        card.add(createDetailLabel("Reason", issue.reason()));
+        card.add(createDetailLabel("Suggested fix", issue.suggestedFix()));
+
+        issuesPanel.add(card);
+        issuesPanel.add(Box.createVerticalStrut(8));
+    }
+
+    private JLabel createDetailLabel(String label, String value) {
+        String html = "<html><div style='width: 550px;'>"
+                + "<b>" + escapeHtml(label) + ":</b> "
+                + escapeHtml(value)
+                + "</div></html>";
+
+        JLabel result = new JLabel(html);
+        result.setAlignmentX(Component.LEFT_ALIGNMENT);
+        result.setBorder(new EmptyBorder(2, 0, 2, 0));
+        return result;
+    }
+
 
     private void showEmptyState() {
         addIssue("[INFO] Run Analyze Spring Boot Compatibility to inspect this project.");
